@@ -19,7 +19,7 @@
 - **可视化报告**：自动生成波形图、频谱图及 Markdown 分析报告
 - **长期记忆**：跨会话保存历史分析记录，支持追问上次结果
 
-**数据来源**：[GRABMyo 公开数据集](https://physionet.org/content/grabmyo/1.1.0/)（43 名受试者，32 通道，2048Hz 采样率，16 种手势）
+**数据来源**：[GRABMyo 公开数据集](https://physionet.org/content/grabmyo)（43 名受试者，32 通道，2048Hz 采样率，16 种手势）
 
 ---
 
@@ -71,7 +71,7 @@ emgagent/
 
 ### 1. 从零实现 ReAct Agent，不依赖 LangChain
 
-未使用任何 Agent 框架，手动实现了 Thought → Action → Observation 循环、工具注册表、上下文管理，深入理解 Agent 底层机制。
+未使用任何 Agent 框架，手动实现了 Thought → Action → Observation 循环、工具注册表、上下文管理， Agent 底层机制。
 
 ### 2. 三种执行模式自适应切换
 
@@ -126,11 +126,11 @@ LLM_BASE_URL="https://api.siliconflow.cn/v1"
 LLM_MODEL_ID="Qwen/Qwen2.5-32B-Instruct"
 ```
 
-推荐使用[硅基流动](https://cloud.siliconflow.cn)，国内直连，`Qwen2.5-32B-Instruct` 性价比最优。
+使用[硅基流动](https://cloud.siliconflow.cn)，国内直连，Qwen2.5-32B-Instruct。
 
 ### 准备数据
 
-下载 [GRABMyo 数据集](https://physionet.org/content/grabmyo/1.1.0/) 后运行转换脚本：
+下载 [GRABMyo 数据集](https://physionet.org/content/grabmyo) 后运行转换脚本：
 
 ```bash
 python data/convert_grabmyo.py
