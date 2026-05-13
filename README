@@ -1,0 +1,235 @@
+# EMG Signal Analysis Agent
+
+> 基于 ReAct 范式从零构建的肌电信号智能分析系统，集成信号处理、RAG 知识库检索、Function Calling 工具调用与长期记忆模块，支持 Web 交互界面。
+
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Dataset](https://img.shields.io/badge/Dataset-GRABMyo-orange.svg)](https://physionet.org/content/grabmyo/1.1.0/)
+
+---
+
+## 项目简介
+
+本项目围绕可穿戴 sEMG（表面肌电）设备场景，从零实现了一个具备以下能力的智能 Agent：
+
+- **信号分析**：加载真实 EMG 数据，完成带通滤波、陷波滤波、特征提取（RMS、MAV、MPF、MDF）
+- **疲劳评估**：基于频域指标（MPF/MDF）对肌肉疲劳状态进行定量评估
+- **对比实验**：分析同一手势重复 7 次后的疲劳变化趋势，RMS 下降 6-7%、MPF 下降 3-4%
+- **知识问答**：RAG 检索肌电专业知识库，回答凝胶电极、信号处理等专业问题
+- **可视化报告**：自动生成波形图、频谱图及 Markdown 分析报告
+- **长期记忆**：跨会话保存历史分析记录，支持追问上次结果
+
+**数据来源**：[GRABMyo 公开数据集](https://physionet.org/content/grabmyo/1.1.0/)（43 名受试者，32 通道，2048Hz 采样率，16 种手势）
+
+---
+
+## 系统架构
+
+```
+用户输入
+    ↓
+意图分类（KNOWLEDGE / ANALYSIS / COMPARE / FOLLOWUP）
+    ↓
+┌─────────────────────────────────────────────┐
+│  KNOWLEDGE  │  RAG检索 + LLM直接回答（~4s）  │
+│  ANALYSIS   │  run_fast：规划→工具执行→总结（~8s）│
+│  COMPARE    │  Function Calling + 并行执行（~6s）│
+│  FOLLOWUP   │  携带历史上下文 + run_fast       │
+└─────────────────────────────────────────────┘
+    ↓
+Memory 写入 + 流式返回
+```
+
+### 核心模块
+
+```
+emgagent/
+├── agent/
+│   ├── core.py            # ReAct 主循环 / run_fast / Function Calling
+│   ├── llm.py             # LLM 调用封装（普通/工具调用/流式）
+│   ├── memory.py          # JSON 持久化长期记忆
+│   ├── timer.py           # 执行时间统计
+│   └── tool_registry.py   # 工具注册与调用
+├── tools/
+│   ├── signal_processor.py   # 信号加载 + 带通/陷波滤波
+│   ├── feature_extractor.py  # RMS / MAV / MPF / MDF 特征提取
+│   ├── rag_retriever.py      # TF-IDF 知识库检索
+│   ├── report_generator.py   # 波形图 + 频谱图 + Markdown 报告
+│   └── comparator.py         # Trial 对比分析
+├── knowledge_base/
+│   └── emg_knowledge.py      # 16 条 EMG 专业知识文本
+├── data/                     # EMG 数据文件（CSV 格式）
+├── reports/                  # 生成的分析报告
+├── memory/                   # 历史对话记录
+├── app.py                    # Gradio 网页入口
+└── main.py                   # 命令行入口
+```
+
+---
+
+## 技术亮点
+
+### 1. 从零实现 ReAct Agent，不依赖 LangChain
+
+未使用任何 Agent 框架，手动实现了 Thought → Action → Observation 循环、工具注册表、上下文管理，深入理解 Agent 底层机制。
+
+### 2. 三种执行模式自适应切换
+
+| 模式 | LLM 调用次数 | 响应时间 | 适用场景 |
+|---|---|---|---|
+| RAG 直答 | 1 次 | ~4s | 知识问答 |
+| run_fast | 2 次 | ~8s | 信号分析 |
+| Function Calling | 2-3 次 | ~6s | 对比任务 |
+
+### 3. 意图分类驱动的路由系统
+
+LLM 自动判断用户意图（KNOWLEDGE / ANALYSIS / COMPARE / FOLLOWUP），动态选择最优执行路径，避免每次都跑完整分析流程。
+
+### 4. 原生 Function Calling + 并行工具执行
+
+对比任务使用 Qwen2.5 原生 Function Calling，工具调用格式稳定，通过 `ThreadPoolExecutor` 并行执行多工具，相比串行 ReAct 提速 4 倍。
+
+### 5. Reflection 自检机制
+
+Agent 输出结论前经过一轮自检，验证 MPF/MDF 数值与疲劳状态描述一致性，发现错误自动修正，提升输出可靠性。
+
+### 6. 真实公开数据集验证
+
+使用 GRABMyo 数据集（2048Hz 采样率，腕部 W1/W2/W3 通道），分析同一手势 7 次重复的疲劳变化趋势，结果与文献报道一致。
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- Python 3.10+
+- CUDA（可选，用于本地模型加速）
+
+### 安装依赖
+
+```bash
+git clone https://github.com/JIAOKUIPENG/emg-signal-agent.git
+cd emg-signal-agent
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+```
+
+### 配置 API
+
+在项目根目录新建 `.env` 文件：
+
+```
+LLM_API_KEY="your-api-key"
+LLM_BASE_URL="https://api.siliconflow.cn/v1"
+LLM_MODEL_ID="Qwen/Qwen2.5-32B-Instruct"
+```
+
+推荐使用[硅基流动](https://cloud.siliconflow.cn)，国内直连，`Qwen2.5-32B-Instruct` 性价比最优。
+
+### 准备数据
+
+下载 [GRABMyo 数据集](https://physionet.org/content/grabmyo/1.1.0/) 后运行转换脚本：
+
+```bash
+python data/convert_grabmyo.py
+```
+
+或直接使用项目内置的示例数据 `data/sample_emg.csv`。
+
+### 启动 Web 界面
+
+```bash
+python app.py
+```
+
+打开浏览器访问 `http://127.0.0.1:7860`
+
+### 命令行运行
+
+```bash
+python main.py
+```
+
+---
+
+## 使用示例
+
+**信号分析：**
+```
+分析 data/sample_emg.csv 的三个通道，给出疲劳评估报告
+```
+
+**对比实验：**
+```
+对比 trial1 和 trial7 的疲劳变化
+```
+
+**专业知识问答：**
+```
+凝胶电极对 EMG 信号质量有什么影响？
+EMG 信号中 MPF 和 MDF 如何反映肌肉疲劳？
+```
+
+**追问上次结果：**
+```
+channel3 的疲劳程度为什么最高？
+```
+
+---
+
+## 实验结果
+
+基于 GRABMyo 数据集（participant1，gesture1，trial1-7）的对比实验：
+
+| 通道 | RMS 变化 | MPF 变化 | 疲劳评估 |
+|---|---|---|---|
+| W1 (channel1) | -7.5% | -3.1% | 轻度疲劳趋势 |
+| W2 (channel2) | -6.2% | -3.0% | 轻度疲劳趋势 |
+| W3 (channel3) | -7.4% | -3.8% | 轻度疲劳趋势 |
+
+同一手势重复 7 次后，三通道 MPF 均呈下降趋势，与文献中肌肉疲劳时频率向低频偏移的规律一致。
+
+---
+
+## 响应时间分析
+
+基于 Qwen2.5-32B-Instruct 模型的实测数据：
+
+```
+知识问答：意图分类(0.6s) + RAG检索(0s) + LLM回答(3-5s) ≈ 4-6s
+信号分析：意图分类(0.4s) + LLM规划(1s) + 工具执行(0.1s) + LLM总结(5-8s) ≈ 7-10s
+对比分析：意图分类(0.3s) + Function Calling执行(5-8s) ≈ 6-9s
+```
+
+---
+
+## 依赖列表
+
+```
+openai
+python-dotenv
+gradio
+scipy
+numpy
+pandas
+matplotlib
+scikit-learn
+sentence-transformers
+wfdb
+```
+
+完整依赖见 `requirements.txt`。
+
+---
+
+## 项目背景
+
+作者具有自动化专业背景，参与过肌电凝胶电极和可穿戴设备相关研究，本项目将专业领域知识与大语言模型 Agent 技术结合，探索 AI 辅助生物信号分析的可能性。
+
+---
+
+## License
+
+MIT License © 2025 [JIAOKUIPENG](https://github.com/JIAOKUIPENG)
