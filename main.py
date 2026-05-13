@@ -19,6 +19,7 @@ def tool_preprocess(channel: str) -> str:
 def tool_extract(channel: str) -> str:
     return extract_features(EMG_FILE, channel)
 
+
 agent = EMGAgent()
 agent.register_tool("load_emg", tool_load_emg,
     "加载EMG数据，无需参数：load_emg()")

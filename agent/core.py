@@ -88,10 +88,11 @@ class EMGAgent:
                 history.append({"role": "user", "content": f"Observation: {obs}"})
                 continue
 
-            tool_name = tool_match.group(1)
-            args_str = tool_match.group(2)
-            kwargs = dict(re.findall(r'(\w+)="([^"]*)"', args_str)) if args_str.strip() else {}
-
+            kwargs = dict(re.findall(r"(\w+)[=:]['\"]([^'\"]*)['\"]", args_str)) if args_str.strip() else {}
+            try:
+                obs = self.registry.call(tool_name, **kwargs)
+            except TypeError as e:
+                obs = f"工具调用参数错误，跳过：{e}"
             # 调用工具
             print(f"调用工具: {tool_name}，参数: {kwargs}")
             obs = self.registry.call(tool_name, **kwargs)
@@ -132,11 +133,17 @@ class EMGAgent:
 
         results = []
         for tool_name, args_str in actions:
-            kwargs = dict(re.findall(r'(\w+)="([^"]*)"', args_str)) if args_str.strip() else {}
+            if tool_name == "Finish":  # 跳过 Finish
+                continue
+            kwargs = dict(re.findall(r"(\w+)[=:]['\"]([^'\"]*)['\"]", args_str)) if args_str.strip() else {}
             print(f"\n执行：{tool_name}({kwargs})")
-            obs = self.registry.call(tool_name, **kwargs)
+            try:
+                obs = self.registry.call(tool_name, **kwargs)
+            except TypeError as e:
+                obs = f"工具调用参数错误，跳过：{e}"
             print(f"结果：{obs}")
             results.append(f"[{tool_name}] {obs}")
+
 
         if not results:
             return "未能解析执行计划，请重试"
